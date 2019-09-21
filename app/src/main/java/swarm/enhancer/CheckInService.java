@@ -41,6 +41,7 @@ public class CheckInService extends JobService {
     public static boolean SHOW_INFO_TOASTS = true;
     public static boolean SHOW_DEBUG_TOASTS = false;
 
+//    public static final long REFRESH_PERIOD_MILLIS = 15 * 1000;
     public static final long REFRESH_PERIOD_MILLIS = 4 * 60 * 60 * 1000;
     public static final double LOCAL_RADIUS = 5;
     public static final String CHECK_IN_SHOUT = "Automated check-in by Swarm Enhancer";
@@ -48,22 +49,26 @@ public class CheckInService extends JobService {
     private static Foursquare foursquare;
 
     private FusedLocationProviderClient fusedLocationClient;
+    private JobScheduler jobScheduler;
+    private JobInfo jobInfo;
 
-    public static void start(Context context, String token) {
-        scheduleRefresh(context, token, swarm.enhancer.foursquare.Location.invalid(), 0);
+    private static CheckInService instance;
+
+    public static CheckInService get() {
+        if (instance == null){
+            instance = new CheckInService();
+        }
+        return instance;
     }
 
-    private static void scheduleRefresh(Context context, String token, swarm.enhancer.foursquare.Location location, long interval) {
+    public void start(Context context, String token) {
+        scheduleJob(context, token, swarm.enhancer.foursquare.Location.invalid(), 0);
+    }
 
-        // Get the job scheduler
-        JobScheduler jobScheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
-        if (jobScheduler == null) {
-            Log.e(CheckInService.class, context, "Failed to retrieve JobScheduler", true);
-            return;
-        }
+    private void scheduleJob(Context context, String token, swarm.enhancer.foursquare.Location location, long interval) {
 
         // Get info on the previously scheduled job
-        JobInfo jobInfo = jobScheduler.getPendingJob(CheckInService.JOB_ID);
+        JobInfo jobInfo = getJobInfo(context);
 
         // Set job parameters
         PersistableBundle bundle = new PersistableBundle();
@@ -76,6 +81,10 @@ public class CheckInService extends JobService {
             bundle.putDouble("lng", jobInfo.getExtras().getDouble("lng"));
         }
 
+        scheduleJobWithParameters(context, bundle, interval);
+    }
+
+    private void scheduleJobWithParameters(Context context, PersistableBundle bundle, long interval) {
         // Build job info
         jobInfo = new JobInfo.Builder(CheckInService.JOB_ID, new ComponentName(context, CheckInService.class))
                 .setMinimumLatency(interval)
@@ -85,12 +94,47 @@ public class CheckInService extends JobService {
                 .build();
 
         // Schedule job and check result
-        int result = jobScheduler.schedule(jobInfo);
+        int result = getJobScheduler(this).schedule(jobInfo);
         if (result == JobScheduler.RESULT_FAILURE) {
-            Log.e(CheckInService.class, context, String.format(Locale.US, "Failed to schedule service job: %d", result), true);
+            Log.e(CheckInService.class, this, String.format(Locale.US, "Failed to schedule service job: %d", result), true);
+            throw new RuntimeException("Failed to schedule job");
         } else {
-            Log.d(CheckInService.class, context, String.format(Locale.US, "Service job scheduled in %d ms", interval), SHOW_DEBUG_TOASTS);
+            Log.d(CheckInService.class, this, String.format(Locale.US, "Service job scheduled in %d ms", interval), SHOW_DEBUG_TOASTS);
         }
+    }
+
+    private void updateJobParameterLocation(Context context, swarm.enhancer.foursquare.Location location) {
+        // Get job info
+        JobInfo jobInfo = getJobInfo(context);
+        if (jobInfo == null) {
+            Log.e(CheckInService.class, context, "Pending job not found", true);
+            throw new RuntimeException("Pending job not found");
+        }
+
+        PersistableBundle bundle = new PersistableBundle();
+        bundle.putDouble("lat", location.lat);
+        bundle.putDouble("lng", location.lng);
+        bundle.putString("token", jobInfo.getExtras().getString("token"));
+
+        scheduleJobWithParameters(context, bundle, REFRESH_PERIOD_MILLIS);
+    }
+
+    private JobScheduler getJobScheduler(Context context) {
+        if (jobScheduler == null) {
+            jobScheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+            if (jobScheduler == null) {
+                Log.e(CheckInService.class, context, "Failed to retrieve JobScheduler", true);
+                throw new RuntimeException("Failed to retrieve JobScheduler");
+            }
+        }
+        return jobScheduler;
+    }
+
+    private JobInfo getJobInfo(Context context) {
+        if (jobInfo == null) {
+            jobInfo = getJobScheduler(context).getPendingJob(CheckInService.JOB_ID);
+        }
+        return jobInfo;
     }
 
     @Override
@@ -146,18 +190,20 @@ public class CheckInService extends JobService {
                         Log.e(CheckInService.class, CheckInService.this, e.getMessage(), true, e);
 
                         // Schedule the next service invocation
-                        scheduleRefresh(CheckInService.this, token, swarm.enhancer.foursquare.Location.invalid(), REFRESH_PERIOD_MILLIS);
+                        scheduleJob(CheckInService.this, token, previousLocation, REFRESH_PERIOD_MILLIS);
                     }
                 })
                 .addOnSuccessListener(new OnSuccessListener<Location>() {
                     @Override
                     public void onSuccess(Location location) {
                         // Check if current location is available
-                        swarm.enhancer.foursquare.Location currentLocation = swarm.enhancer.foursquare.Location.invalid();
+                        swarm.enhancer.foursquare.Location currentLocation = previousLocation;
                         if (location == null) {
                             // Current location is not available
                             Log.w(CheckInService.class, CheckInService.this, "Location service responded with invalid location", true);
                         } else {
+                            Log.d(CheckInService.class, CheckInService.this, String.format("Last location: %f, %f", location.getLatitude(), location.getLongitude()), SHOW_DEBUG_TOASTS);
+
                             // Set current location
                             currentLocation = new swarm.enhancer.foursquare.Location(location.getLatitude(), location.getLongitude());
 
@@ -166,7 +212,7 @@ public class CheckInService extends JobService {
                         }
 
                         // Schedule the next service invocation
-                        scheduleRefresh(CheckInService.this, token, currentLocation, REFRESH_PERIOD_MILLIS);
+                        scheduleJob(CheckInService.this, token, previousLocation, REFRESH_PERIOD_MILLIS);
                     }
                 });
     }
@@ -263,12 +309,14 @@ public class CheckInService extends JobService {
                     // Check if the venue that we have found is far enough from the current venue
                     doCheckIn = !isWithinLocalRadius(checkIn.venue, venue);
                 }
+
+                updateJobParameterLocation(CheckInService.this, venue.location);
             }
         }
         return doCheckIn;
     }
 
-    private void checkInToVenue(final Venue venue, String token) {
+    private void checkInToVenue(final Venue venue, final String token) {
         foursquare().createCheckIn(venue.id, CHECK_IN_SHOUT, token).enqueue(new Callback<Void>() {
             @Override
             public void onResponse(Call<Void> call, Response<Void> response) {
@@ -277,6 +325,8 @@ public class CheckInService extends JobService {
                     Log.e(CheckInService.class, CheckInService.this, String.format("Failed to check in: %s, %s", response.code(), response.message()), true);
                 } else {
                     Log.i(CheckInService.class, CheckInService.this, String.format("Successfully checked in to %s", venue.name), true);
+
+                    updateJobParameterLocation(CheckInService.this, venue.location);
                 }
             }
 
@@ -291,13 +341,21 @@ public class CheckInService extends JobService {
         if (location1 == null || location2 == null || !location1.isValid() || !location2.isValid()) {
             return false;
         }
-        return GeoUtils.distance(location1.lat, location1.lng, location2.lat, location2.lng, GeoUtils.Unit.KILOMETERS) < LOCAL_RADIUS;
+
+        double distance = GeoUtils.distance(location1.lat, location1.lng, location2.lat, location2.lng, GeoUtils.Unit.KILOMETERS);
+        Log.d(CheckInService.class, CheckInService.this, String.format(Locale.US, "Distance between locations is %f km", distance), SHOW_DEBUG_TOASTS);
+
+        return distance < LOCAL_RADIUS;
     }
 
     private boolean isWithinLocalRadius(Venue venue1, Venue venue2) {
         if (venue1.location == null || venue2.location == null || !venue1.location.isValid() || !venue2.location.isValid()) {
             return false;
         }
-        return GeoUtils.distance(venue1.location.lat, venue1.location.lng, venue2.location.lat, venue2.location.lng, GeoUtils.Unit.KILOMETERS) < LOCAL_RADIUS;
+
+        double distance = GeoUtils.distance(venue1.location.lat, venue1.location.lng, venue2.location.lat, venue2.location.lng, GeoUtils.Unit.KILOMETERS);
+        Log.d(CheckInService.class, CheckInService.this, String.format(Locale.US, "Distance between venues %s and %s is %f km", venue1.name, venue2.name, distance), SHOW_DEBUG_TOASTS);
+
+        return distance < LOCAL_RADIUS;
     }
 }

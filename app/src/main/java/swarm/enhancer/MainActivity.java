@@ -92,7 +92,7 @@ public class MainActivity extends AppCompatActivity {
             Log.d(MainActivity.class, this, "User is authenticated", false);
 
             // Schedule updates in the check-in service
-            CheckInService.start(this, token);
+            CheckInService.get().start(this, token);
         }
 
         TextView tvMessage = findViewById(R.id.tvMessage);
