@@ -41,7 +41,7 @@ public class CheckInService extends JobService {
     public static boolean SHOW_INFO_TOASTS = true;
     public static boolean SHOW_DEBUG_TOASTS = false;
 
-    public static final long REFRESH_PERIOD_MILLIS = 15 * 60 * 60 * 1000;
+    public static final long REFRESH_PERIOD_MILLIS = 5 * 60 * 1000;
     public static final double LOCAL_RADIUS = 0.5;
     public static final String CHECK_IN_SHOUT = "Automated check-in by Swarm Enhancer";
 
