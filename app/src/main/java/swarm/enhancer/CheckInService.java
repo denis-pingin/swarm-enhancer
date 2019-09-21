@@ -276,7 +276,7 @@ public class CheckInService extends JobService {
                 if (response.code() != HttpStatus.SC_OK) {
                     Log.e(CheckInService.class, CheckInService.this, String.format("Failed to check in: %s, %s", response.code(), response.message()), true);
                 } else {
-                    Log.e(CheckInService.class, CheckInService.this, String.format("Successfully checked in to %s", venue.name), true);
+                    Log.i(CheckInService.class, CheckInService.this, String.format("Successfully checked in to %s", venue.name), true);
                 }
             }
 
