@@ -1,10 +1,8 @@
-# swarm-enhancer
-Swarm Enhancer
-
+# Swarm Enhancer
 This Android application will periodically check your current location and automatically check you in to the closest Foursquare venue.
 
 ## Parameters
-### Update interval:
+### Update interval
 _Update interval_ parameter controls how often the app will check whether your current location changed significantly relative to the _most recent checked-in venue_ in foursquare.
 
 This check is very cheap, since the location of the _most recent checked-in venue_ is cached in the application and no foursquare API requests are required.
