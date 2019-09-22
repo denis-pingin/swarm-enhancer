@@ -1,12 +1,15 @@
 package swarm.enhancer;
 
 import android.Manifest;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.text.method.ScrollingMovementMethod;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
@@ -14,6 +17,7 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.foursquare.android.nativeoauth.FoursquareCancelException;
 import com.foursquare.android.nativeoauth.FoursquareDenyException;
@@ -44,9 +48,18 @@ public class MainActivity extends AppCompatActivity {
         clientSecret = BuildConfig.CLIENT_SECRET;
     }
 
+    private BroadcastReceiver messageReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            updateActivityLog();
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        LocalBroadcastManager.getInstance(this).registerReceiver(messageReceiver, new IntentFilter("activity-updated"));
 
         setContentView(R.layout.activity_main);
 
@@ -55,6 +68,12 @@ public class MainActivity extends AppCompatActivity {
         } else {
             ensureUi();
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(messageReceiver);
+        super.onDestroy();
     }
 
     @Override
@@ -142,6 +161,11 @@ public class MainActivity extends AppCompatActivity {
                 setPauseResumeUpdatesButtonText(btnPauseResumeUpdates);
             }
         });
+
+        TextView tvActivity = findViewById(R.id.tvActivity);
+        tvActivity.setMovementMethod(new ScrollingMovementMethod());
+        tvActivity.setVisibility(isAuthorized ? View.VISIBLE : View.GONE);
+        updateActivityLog();
     }
 
     private void startStopCheckInService(String token) {
@@ -151,6 +175,13 @@ public class MainActivity extends AppCompatActivity {
         } else {
             CheckInService.get().start(this, token);
         }
+    }
+
+    private void updateActivityLog() {
+        String activityLog = Log.getActivityLog(MainActivity.this);
+
+        TextView tvActivity = findViewById(R.id.tvActivity);
+        tvActivity.setText(activityLog);
     }
 
     private boolean areUpdatesPaused() {
@@ -237,4 +268,5 @@ public class MainActivity extends AppCompatActivity {
         Intent intent = FoursquareOAuth.getTokenExchangeIntent(this, clientId, clientSecret, code);
         startActivityForResult(intent, REQUEST_CODE_FSQ_TOKEN_EXCHANGE);
     }
+
 }

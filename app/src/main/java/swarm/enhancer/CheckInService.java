@@ -38,7 +38,7 @@ public class CheckInService extends JobService {
 
     public static final int JOB_ID = 0;
 
-    public static boolean SHOW_INFO_TOASTS = true;
+    public static boolean SHOW_INFO_TOASTS = false;
     public static boolean SHOW_DEBUG_TOASTS = false;
 
 //    public static final long REFRESH_PERIOD_MILLIS = 15 * 1000;
@@ -63,12 +63,12 @@ public class CheckInService extends JobService {
 
     public void start(Context context, String token) {
         scheduleJob(context, token, swarm.enhancer.foursquare.Location.invalid(), 0);
-        Log.i(CheckInService.class, context, "Automatic check-ins resumed", true);
+        Log.i(CheckInService.class, context, "Automatic check-ins resumed", SHOW_INFO_TOASTS);
     }
 
     public void stop(Context context) {
         cancelJob(context);
-        Log.i(CheckInService.class, context, "Automatic check-ins paused", true);
+        Log.i(CheckInService.class, context, "Automatic check-ins paused", SHOW_INFO_TOASTS);
     }
 
     private void scheduleJob(Context context, String token, swarm.enhancer.foursquare.Location location, long interval) {
@@ -150,6 +150,8 @@ public class CheckInService extends JobService {
     @Override
     public void onCreate() {
         super.onCreate();
+
+        instance = this;
 
         // Retrieve location fused client
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
