@@ -5,13 +5,14 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.TableLayout;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -28,12 +29,12 @@ import com.foursquare.android.nativeoauth.FoursquareUnsupportedVersionException;
 import com.foursquare.android.nativeoauth.model.AccessTokenResponse;
 import com.foursquare.android.nativeoauth.model.AuthCodeResponse;
 
+import java.util.Locale;
+
 import swarm.enhancer.foursquare.FileTokenStore;
 import swarm.enhancer.utils.Log;
 
 public class MainActivity extends AppCompatActivity {
-
-    private static final String KEY_UPDATES_PAUSED = "updatesPaused";
 
     private static final int REQUEST_CODE_FSQ_CONNECT = 200;
     private static final int REQUEST_CODE_FSQ_TOKEN_EXCHANGE = 201;
@@ -142,17 +143,16 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        // Handle button pause/resume updates
         final Button btnPauseResumeUpdates = findViewById(R.id.btnPauseResumeUpdates);
         btnPauseResumeUpdates.setVisibility(isAuthorized ? View.VISIBLE : View.GONE);
-
         // Set button text according to current state
         setPauseResumeUpdatesButtonText(btnPauseResumeUpdates);
-
         btnPauseResumeUpdates.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 // Save inverted value to preferences
-                setUpdatesPaused(!areUpdatesPaused());
+                Preferences.setUpdatesPaused(MainActivity.this, !Preferences.areUpdatesPaused(MainActivity.this));
 
                 // Start or stop the check-in service
                 startStopCheckInService(token);
@@ -162,15 +162,84 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        // Handle activity log view
         TextView tvActivity = findViewById(R.id.tvActivity);
         tvActivity.setMovementMethod(new ScrollingMovementMethod());
         tvActivity.setVisibility(isAuthorized ? View.VISIBLE : View.GONE);
         updateActivityLog();
+
+        // Load settings to the UI
+        loadUpdateInterval();
+        loadLocalRadius();
+
+        final TableLayout tableLayout = findViewById(R.id.tableLayout);
+        tableLayout.setVisibility(isAuthorized ? View.VISIBLE : View.GONE);
+
+        final Button btnApply = findViewById(R.id.btnApply);
+        btnApply.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                final EditText txtUpdateInterval = findViewById(R.id.txtUpdateInterval);
+                String updateIntervalString = txtUpdateInterval.getText().toString();
+
+                float currentUpdateInterval = Preferences.getUpdateInterval(MainActivity.this);
+                float updateInterval = currentUpdateInterval;
+                try {
+                    updateInterval = Float.parseFloat(updateIntervalString);
+                } catch (NumberFormatException e) {
+                    Log.e(MainActivity.class, MainActivity.this, String.format(Locale.US, "Invalid number format: %s", updateIntervalString), false);
+                }
+
+                final EditText txtLocalRadius = findViewById(R.id.txtLocalRadius);
+                String localRadiusString = txtLocalRadius.getText().toString();
+
+                float currentLocalRadius = Preferences.getLocalRadius(MainActivity.this);
+                float localRadius = currentLocalRadius;
+                try {
+                    localRadius = Float.parseFloat(localRadiusString);
+                } catch (NumberFormatException e) {
+                    Log.e(MainActivity.class, MainActivity.this, String.format(Locale.US, "Invalid number format: %s", localRadiusString), false);
+                }
+
+                boolean updated = false;
+
+                if (currentUpdateInterval != updateInterval) {
+                    updateInterval = Preferences.setUpdateInterval(MainActivity.this, updateInterval);
+                    loadUpdateInterval();
+                    updated = true;
+
+                    Log.i(MainActivity.class, MainActivity.this, String.format(Locale.US, "Set update interval to %.2f hours", updateInterval), false);
+                }
+
+                if (currentLocalRadius != localRadius) {
+                    localRadius = Preferences.setLocalRadius(MainActivity.this, localRadius);
+                    loadLocalRadius();
+                    updated = true;
+
+                    Log.i(MainActivity.class, MainActivity.this, String.format(Locale.US, "Set local radius to %.2f km", localRadius), false);
+                }
+
+                if (updated) {
+                    // Start or stop the check-in service
+                    startStopCheckInService(token);
+                }
+            }
+        });
+    }
+
+    private void loadUpdateInterval() {
+        final EditText txtUpdateInterval = findViewById(R.id.txtUpdateInterval);
+        txtUpdateInterval.setText(String.format(Locale.US, "%.2f", Preferences.getUpdateInterval(this)));
+    }
+
+    private void loadLocalRadius() {
+        final EditText txtLocalRadius = findViewById(R.id.txtLocalRadius);
+        txtLocalRadius.setText(String.format(Locale.US, "%.2f", Preferences.getLocalRadius(this)));
     }
 
     private void startStopCheckInService(String token) {
         // Start or stop the check-in service
-        if (areUpdatesPaused()) {
+        if (Preferences.areUpdatesPaused(this)) {
             CheckInService.get().stop(this);
         } else {
             CheckInService.get().start(this, token);
@@ -184,18 +253,8 @@ public class MainActivity extends AppCompatActivity {
         tvActivity.setText(activityLog);
     }
 
-    private boolean areUpdatesPaused() {
-        return getPreferences(Context.MODE_PRIVATE).getBoolean(getString(R.string.updates_paused_key), false);
-    }
-
-    private void setUpdatesPaused(boolean updatesPaused) {
-        SharedPreferences.Editor editor = getPreferences(Context.MODE_PRIVATE).edit();
-        editor.putBoolean(getString(R.string.updates_paused_key), updatesPaused);
-        editor.apply();
-    }
-
     private void setPauseResumeUpdatesButtonText(Button btnPauseResumeUpdates) {
-        btnPauseResumeUpdates.setText(areUpdatesPaused() ? R.string.resume_updates_button_text : R.string.pause_updates_button_text);
+        btnPauseResumeUpdates.setText(Preferences.areUpdatesPaused(this) ? R.string.resume_updates_button_text : R.string.pause_updates_button_text);
     }
 
     private void onCompleteConnect(int resultCode, Intent data) {

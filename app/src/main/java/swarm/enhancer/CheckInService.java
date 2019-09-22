@@ -41,9 +41,6 @@ public class CheckInService extends JobService {
     public static boolean SHOW_INFO_TOASTS = false;
     public static boolean SHOW_DEBUG_TOASTS = false;
 
-//    public static final long REFRESH_PERIOD_MILLIS = 15 * 1000;
-    public static final long REFRESH_PERIOD_MILLIS = 4 * 60 * 60 * 1000;
-    public static final double LOCAL_RADIUS = 5;
     public static final String CHECK_IN_SHOUT = "Automated check-in by Swarm Enhancer";
 
     private static Foursquare foursquare;
@@ -122,7 +119,7 @@ public class CheckInService extends JobService {
         bundle.putDouble("lng", location.lng);
         bundle.putString("token", jobInfo.getExtras().getString("token"));
 
-        scheduleJobWithParameters(context, bundle, REFRESH_PERIOD_MILLIS);
+        scheduleJobWithParameters(context, bundle, getUpdateIntervalInMillis());
     }
 
     private void cancelJob(Context context) {
@@ -202,7 +199,7 @@ public class CheckInService extends JobService {
                         Log.e(CheckInService.class, CheckInService.this, e.getMessage(), true, e);
 
                         // Schedule the next service invocation
-                        scheduleJob(CheckInService.this, token, previousLocation, REFRESH_PERIOD_MILLIS);
+                        scheduleJob(CheckInService.this, token, previousLocation, getUpdateIntervalInMillis());
                     }
                 })
                 .addOnSuccessListener(new OnSuccessListener<Location>() {
@@ -224,7 +221,7 @@ public class CheckInService extends JobService {
                         }
 
                         // Schedule the next service invocation
-                        scheduleJob(CheckInService.this, token, previousLocation, REFRESH_PERIOD_MILLIS);
+                        scheduleJob(CheckInService.this, token, previousLocation, getUpdateIntervalInMillis());
                     }
                 });
     }
@@ -357,7 +354,7 @@ public class CheckInService extends JobService {
         double distance = GeoUtils.distance(location1.lat, location1.lng, location2.lat, location2.lng, GeoUtils.Unit.KILOMETERS);
         Log.d(CheckInService.class, CheckInService.this, String.format(Locale.US, "Distance between locations is %f km", distance), SHOW_DEBUG_TOASTS);
 
-        return distance < LOCAL_RADIUS;
+        return distance < Preferences.getLocalRadius(this);
     }
 
     private boolean isWithinLocalRadius(Venue venue1, Venue venue2) {
@@ -368,6 +365,10 @@ public class CheckInService extends JobService {
         double distance = GeoUtils.distance(venue1.location.lat, venue1.location.lng, venue2.location.lat, venue2.location.lng, GeoUtils.Unit.KILOMETERS);
         Log.d(CheckInService.class, CheckInService.this, String.format(Locale.US, "Distance between venues %s and %s is %f km", venue1.name, venue2.name, distance), SHOW_DEBUG_TOASTS);
 
-        return distance < LOCAL_RADIUS;
+        return distance < Preferences.getLocalRadius(this);
+    }
+
+    private long getUpdateIntervalInMillis() {
+        return (long)(Preferences.getUpdateInterval(this) *  60 * 60 * 1000);
     }
 }
