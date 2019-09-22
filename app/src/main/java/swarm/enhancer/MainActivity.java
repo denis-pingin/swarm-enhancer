@@ -1,7 +1,9 @@
 package swarm.enhancer;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.text.TextUtils;
@@ -26,6 +28,8 @@ import swarm.enhancer.foursquare.FileTokenStore;
 import swarm.enhancer.utils.Log;
 
 public class MainActivity extends AppCompatActivity {
+
+    private static final String KEY_UPDATES_PAUSED = "updatesPaused";
 
     private static final int REQUEST_CODE_FSQ_CONNECT = 200;
     private static final int REQUEST_CODE_FSQ_TOKEN_EXCHANGE = 201;
@@ -85,14 +89,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void ensureUi() {
-        String token = FileTokenStore.get(getApplicationContext()).getToken();
-        boolean isAuthorized = !TextUtils.isEmpty(token);
+        final String token = FileTokenStore.get(getApplicationContext()).getToken();
+        final boolean isAuthorized = !TextUtils.isEmpty(token);
 
+        // Check log-in status
         if (isAuthorized) {
             Log.d(MainActivity.class, this, "User is authenticated", false);
 
-            // Schedule updates in the check-in service
-            CheckInService.get().start(this, token);
+            // Start or stop the check-in service
+            startStopCheckInService(token);
         }
 
         TextView tvMessage = findViewById(R.id.tvMessage);
@@ -117,6 +122,49 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
+
+        final Button btnPauseResumeUpdates = findViewById(R.id.btnPauseResumeUpdates);
+        btnPauseResumeUpdates.setVisibility(isAuthorized ? View.VISIBLE : View.GONE);
+
+        // Set button text according to current state
+        setPauseResumeUpdatesButtonText(btnPauseResumeUpdates);
+
+        btnPauseResumeUpdates.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // Save inverted value to preferences
+                setUpdatesPaused(!areUpdatesPaused());
+
+                // Start or stop the check-in service
+                startStopCheckInService(token);
+
+                // Set button text according to current state
+                setPauseResumeUpdatesButtonText(btnPauseResumeUpdates);
+            }
+        });
+    }
+
+    private void startStopCheckInService(String token) {
+        // Start or stop the check-in service
+        if (areUpdatesPaused()) {
+            CheckInService.get().stop(this);
+        } else {
+            CheckInService.get().start(this, token);
+        }
+    }
+
+    private boolean areUpdatesPaused() {
+        return getPreferences(Context.MODE_PRIVATE).getBoolean(getString(R.string.updates_paused_key), false);
+    }
+
+    private void setUpdatesPaused(boolean updatesPaused) {
+        SharedPreferences.Editor editor = getPreferences(Context.MODE_PRIVATE).edit();
+        editor.putBoolean(getString(R.string.updates_paused_key), updatesPaused);
+        editor.apply();
+    }
+
+    private void setPauseResumeUpdatesButtonText(Button btnPauseResumeUpdates) {
+        btnPauseResumeUpdates.setText(areUpdatesPaused() ? R.string.resume_updates_button_text : R.string.pause_updates_button_text);
     }
 
     private void onCompleteConnect(int resultCode, Intent data) {

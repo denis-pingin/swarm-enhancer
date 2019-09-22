@@ -63,6 +63,12 @@ public class CheckInService extends JobService {
 
     public void start(Context context, String token) {
         scheduleJob(context, token, swarm.enhancer.foursquare.Location.invalid(), 0);
+        Log.i(CheckInService.class, context, "Automatic check-ins resumed", true);
+    }
+
+    public void stop(Context context) {
+        cancelJob(context);
+        Log.i(CheckInService.class, context, "Automatic check-ins paused", true);
     }
 
     private void scheduleJob(Context context, String token, swarm.enhancer.foursquare.Location location, long interval) {
@@ -117,6 +123,10 @@ public class CheckInService extends JobService {
         bundle.putString("token", jobInfo.getExtras().getString("token"));
 
         scheduleJobWithParameters(context, bundle, REFRESH_PERIOD_MILLIS);
+    }
+
+    private void cancelJob(Context context) {
+        getJobScheduler(context).cancel(JOB_ID);
     }
 
     private JobScheduler getJobScheduler(Context context) {

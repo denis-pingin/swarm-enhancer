@@ -2,4 +2,8 @@
     <string name="app_name">Swarm Enhancer</string>
     <string name="connected_to_foursquare">Hey looks like you’re connected to Foursquare!</string>
     <string name="app_not_installed_message">To do this, you’ll need the latest version of Foursquare installed.</string>
+    <string name="updates_paused_key">Updates paused</string>
+    <string name="pause_updates_button_text">Pause automatic check-ins</string>
+    <string name="resume_updates_button_text">Resume automatic check-ins</string>
+    <string name="login_button_text">Login to Swarm</string>
 </resources>
